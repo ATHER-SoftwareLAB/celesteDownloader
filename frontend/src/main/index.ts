@@ -82,6 +82,25 @@ ipcMain.handle('getProgress', async (_event, taskId: string) => {
   }
 })
 
+ipcMain.handle('getQueue', async () => {
+  try {
+    const res = await backendFetch('/queue', 5_000)
+    return res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
+})
+
+ipcMain.handle('pauseQueue', async () => {
+  const res = await backendFetch('/queue/pause', 5_000, { method: 'POST' })
+  return res.json()
+})
+
+ipcMain.handle('resumeQueue', async () => {
+  const res = await backendFetch('/queue/resume', 5_000, { method: 'POST' })
+  return res.json()
+})
+
 app.whenReady().then(() => {
   createWindow()
 

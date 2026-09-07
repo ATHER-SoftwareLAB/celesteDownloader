@@ -3,7 +3,8 @@ import type {
   VideoMetadata,
   ApiError,
   DownloadResponse,
-  DownloadProgress
+  DownloadProgress,
+  QueueStatus
 } from '../shared/ipc-types'
 
 const api = {
@@ -14,6 +15,9 @@ const api = {
     ipcRenderer.invoke('download', { url, format, quality }),
   getProgress: (taskId: string): Promise<DownloadProgress | ApiError> =>
     ipcRenderer.invoke('getProgress', taskId),
+  getQueue: (): Promise<QueueStatus | ApiError> => ipcRenderer.invoke('getQueue'),
+  pauseQueue: (): Promise<{ paused: boolean }> => ipcRenderer.invoke('pauseQueue'),
+  resumeQueue: (): Promise<{ paused: boolean }> => ipcRenderer.invoke('resumeQueue'),
   getDownloadPath: (): Promise<string> => ipcRenderer.invoke('getDownloadPath')
 }
 

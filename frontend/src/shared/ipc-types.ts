@@ -21,11 +21,24 @@ export interface DownloadResponse {
   success: boolean
   task_id: string
   status: string
+  position?: number
 }
 
 export interface DownloadProgress {
   task_id: string
-  status: 'downloading' | 'processing' | 'completed' | 'error'
+  status: 'pending' | 'downloading' | 'processing' | 'completed' | 'error'
   progress: number
   error?: string
+}
+
+export interface QueueItem {
+  task_id: string
+  status: string
+  position: number
+}
+
+export interface QueueStatus {
+  current: { task_id: string; status: string; progress: number } | null
+  queue: QueueItem[]
+  paused: boolean
 }

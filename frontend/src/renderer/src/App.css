@@ -313,6 +313,35 @@ body {
   color: var(--text);
 }
 
+/* Queue */
+.queue-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.queue-section__btn {
+  padding: 6px 14px;
+  background: var(--surface-soft);
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.queue-section__btn:hover {
+  background: #48494c;
+}
+
 /* Error */
 .app__error {
   margin-bottom: 16px;
