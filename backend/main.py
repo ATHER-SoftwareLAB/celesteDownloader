@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 import uuid
 
 import yt_dlp
@@ -12,9 +13,14 @@ app = FastAPI()
 
 DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
 
-# In-memory task tracking. A single process, single download at a time, so a
-# plain dict is enough - no queue/persistence needed yet.
+# In-memory queue: one download processed at a time, in submission order.
+# tasks holds status/progress per task_id; pending holds ids waiting their turn;
+# current_id is the task_id being processed right now (or None if idle).
 tasks: dict[str, dict] = {}
+pending: list[str] = []
+current_id: str | None = None
+paused = False
+queue_lock = threading.Lock()
 
 
 def friendly_error(message: str) -> str:
@@ -47,34 +53,64 @@ class DownloadRequest(BaseModel):
     format: str = "video"
 
 
-def _run_download(task_id: str, req: DownloadRequest) -> None:
+def _process(task_id: str) -> None:
+    global current_id
+    task = tasks[task_id]
+    task["status"] = "downloading"
+
     def on_progress(update: dict) -> None:
-        tasks[task_id].update(update)
+        task.update(update)
 
     try:
         download_video(
-            req.url,
-            req.quality,
+            task["url"],
+            task["quality"],
             DOWNLOAD_DIR,
-            format_type=req.format,
+            format_type=task["format"],
             on_progress=on_progress,
         )
-        tasks[task_id] = {"status": "completed", "progress": 100}
+        task["status"] = "completed"
+        task["progress"] = 100
     except yt_dlp.utils.DownloadError as e:
-        tasks[task_id] = {
-            "status": "error",
-            "progress": tasks[task_id].get("progress", 0),
-            "error": friendly_error(str(e)),
-        }
+        task["status"] = "error"
+        task["error"] = friendly_error(str(e))
+    finally:
+        with queue_lock:
+            current_id = None
+
+
+def _worker() -> None:
+    global current_id
+    while True:
+        task_id = None
+        with queue_lock:
+            if not paused and current_id is None and pending:
+                task_id = pending.pop(0)
+                current_id = task_id
+        if task_id is None:
+            time.sleep(0.5)
+            continue
+        _process(task_id)
+
+
+threading.Thread(target=_worker, daemon=True).start()
 
 
 @app.post("/download")
 def download(req: DownloadRequest):
     task_id = str(uuid.uuid4())
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-    tasks[task_id] = {"status": "downloading", "progress": 0}
-    threading.Thread(target=_run_download, args=(task_id, req), daemon=True).start()
-    return {"success": True, "task_id": task_id, "status": "started"}
+    tasks[task_id] = {
+        "url": req.url,
+        "quality": req.quality,
+        "format": req.format,
+        "status": "pending",
+        "progress": 0,
+    }
+    with queue_lock:
+        pending.append(task_id)
+        position = len(pending)
+    return {"success": True, "task_id": task_id, "status": "queued", "position": position}
 
 
 @app.get("/progress/{task_id}")
@@ -82,7 +118,44 @@ def progress(task_id: str):
     task = tasks.get(task_id)
     if task is None:
         return {"error": "Tarea no encontrada"}
-    return {"task_id": task_id, **task}
+    return {
+        "task_id": task_id,
+        "status": task["status"],
+        "progress": task["progress"],
+        **({"error": task["error"]} if "error" in task else {}),
+    }
+
+
+@app.get("/queue")
+def get_queue_status():
+    with queue_lock:
+        current = None
+        if current_id is not None:
+            task = tasks[current_id]
+            current = {
+                "task_id": current_id,
+                "status": task["status"],
+                "progress": task["progress"],
+            }
+        queue_list = [
+            {"task_id": tid, "status": tasks[tid]["status"], "position": i + 1}
+            for i, tid in enumerate(pending)
+        ]
+        return {"current": current, "queue": queue_list, "paused": paused}
+
+
+@app.post("/queue/pause")
+def pause_queue():
+    global paused
+    paused = True
+    return {"paused": True}
+
+
+@app.post("/queue/resume")
+def resume_queue():
+    global paused
+    paused = False
+    return {"paused": False}
 
 
 if __name__ == "__main__":
