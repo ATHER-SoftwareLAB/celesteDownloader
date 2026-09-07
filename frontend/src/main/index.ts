@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
 
 const BACKEND_URL = 'http://127.0.0.1:5000'
@@ -83,9 +83,13 @@ ipcMain.handle('chooseDownloadPath', async () => {
   return result.filePaths[0]
 })
 
+ipcMain.handle('openInFolder', (_event, filePath: string) => {
+  shell.showItemInFolder(filePath)
+})
+
 ipcMain.handle(
   'download',
-  async (_event, opts: { url: string; format: string; quality: string }) => {
+  async (_event, opts: { url: string; format: string; quality: string; title: string }) => {
     try {
       const res = await backendFetch('/download', 10_000, {
         method: 'POST',

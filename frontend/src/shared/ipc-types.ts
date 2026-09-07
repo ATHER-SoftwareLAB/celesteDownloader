@@ -29,6 +29,7 @@ export interface DownloadProgress {
   status: 'pending' | 'downloading' | 'processing' | 'completed' | 'error'
   progress: number
   error?: string
+  path?: string
 }
 
 export interface QueueItem {
