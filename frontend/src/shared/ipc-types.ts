@@ -22,3 +22,10 @@ export interface DownloadResponse {
   task_id: string
   status: string
 }
+
+export interface DownloadProgress {
+  task_id: string
+  status: 'downloading' | 'processing' | 'completed' | 'error'
+  progress: number
+  error?: string
+}

@@ -48,23 +48,55 @@ function App(): JSX.Element {
     setMetadata(result)
   }
 
+  const pollProgress = (taskId: string): void => {
+    const interval = setInterval(async () => {
+      const update = await window.api.getProgress(taskId)
+
+      if (!('status' in update)) {
+        clearInterval(interval)
+        setDownloading(false)
+        setError(update.error)
+        return
+      }
+
+      setProgress(update.progress)
+
+      if (update.status === 'completed') {
+        clearInterval(interval)
+        setDownloading(false)
+      } else if (update.status === 'error') {
+        clearInterval(interval)
+        setDownloading(false)
+        setError(update.error ?? 'La descarga falló')
+      }
+    }, 500)
+  }
+
   const handleDownload = async (): Promise<void> => {
     if (!metadata) return
     setDownloading(true)
     setError('')
     setProgress(0)
 
-    const result = await window.api.download(metadata.url, mode === 'avanzada' ? quality : '1080')
-    setDownloading(false)
+    const result = await window.api.download(
+      metadata.url,
+      format,
+      mode === 'avanzada' ? quality : '1080'
+    )
 
     if ('error' in result || !result.success) {
+      setDownloading(false)
       setError('error' in result ? result.error : 'La descarga falló')
       return
     }
-    setProgress(100)
+    pollProgress(result.task_id)
   }
 
-  const progressLabel = downloading ? 'Descargando...' : `${progress}%`
+  const progressLabel = downloading
+    ? progress >= 100
+      ? 'Procesando...'
+      : `Descargando... ${progress}%`
+    : `${progress}%`
 
   return (
     <div className="app">

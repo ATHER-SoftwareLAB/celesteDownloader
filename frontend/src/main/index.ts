@@ -54,19 +54,31 @@ ipcMain.handle('getInfo', async (_event, url: string) => {
 
 ipcMain.handle('getDownloadPath', () => app.getPath('downloads'))
 
-ipcMain.handle('download', async (_event, opts: { url: string; quality: string }) => {
-  try {
-    const res = await backendFetch('/download', 10 * 60_000, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(opts)
-    })
-    return res.json()
-  } catch (err) {
-    const timedOut = err instanceof Error && err.name === 'AbortError'
-    return {
-      error: timedOut ? 'La descarga tardó demasiado' : 'No se pudo conectar con el backend'
+ipcMain.handle(
+  'download',
+  async (_event, opts: { url: string; format: string; quality: string }) => {
+    try {
+      const res = await backendFetch('/download', 10_000, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(opts)
+      })
+      return res.json()
+    } catch (err) {
+      const timedOut = err instanceof Error && err.name === 'AbortError'
+      return {
+        error: timedOut ? 'No se pudo iniciar la descarga' : 'No se pudo conectar con el backend'
+      }
     }
+  }
+)
+
+ipcMain.handle('getProgress', async (_event, taskId: string) => {
+  try {
+    const res = await backendFetch(`/progress/${taskId}`, 5_000)
+    return res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
   }
 })
 
