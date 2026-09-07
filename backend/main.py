@@ -51,6 +51,7 @@ class DownloadRequest(BaseModel):
     url: str
     quality: str
     format: str = "video"
+    title: str = ""
 
 
 def _process(task_id: str) -> None:
@@ -64,15 +65,17 @@ def _process(task_id: str) -> None:
     try:
         download_dir = get_config()["download_path"]
         os.makedirs(download_dir, exist_ok=True)
-        download_video(
+        output_path = download_video(
             task["url"],
             task["quality"],
             download_dir,
+            task["title"],
             format_type=task["format"],
             on_progress=on_progress,
         )
         task["status"] = "completed"
         task["progress"] = 100
+        task["path"] = output_path
     except yt_dlp.utils.DownloadError as e:
         task["status"] = "error"
         task["error"] = friendly_error(str(e))
@@ -105,6 +108,7 @@ def download(req: DownloadRequest):
         "url": req.url,
         "quality": req.quality,
         "format": req.format,
+        "title": req.title,
         "status": "pending",
         "progress": 0,
     }
@@ -124,6 +128,7 @@ def progress(task_id: str):
         "status": task["status"],
         "progress": task["progress"],
         **({"error": task["error"]} if "error" in task else {}),
+        **({"path": task["path"]} if "path" in task else {}),
     }
 
 

@@ -1,10 +1,8 @@
+import os
 from typing import Callable, Optional
 
 import yt_dlp
-
-# 'android' client returns pre-signed URLs, skipping the JS signature
-# deciphering step that stalls without a JS runtime installed (deno/node).
-CLIENT_ARGS = {"extractor_args": {"youtube": {"player_client": ["android"]}}}
+from yt_dlp.utils import sanitize_filename
 
 # URLs copied from YouTube often carry a `list=` param (mix/playlist/queue).
 # Without noplaylist, yt-dlp extracts every entry in that list instead of
@@ -17,7 +15,6 @@ def get_metadata(url: str) -> dict:
         "quiet": True,
         "skip_download": True,
         "socket_timeout": 15,
-        **CLIENT_ARGS,
         **SINGLE_VIDEO_ARGS,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -56,18 +53,34 @@ def _progress_hook(callback: Callable[[dict], None]):
     return hook
 
 
+def _unique_path(output_dir: str, title: str, ext: str) -> str:
+    safe_title = sanitize_filename(title, restricted=False) or "descarga"
+    candidate = os.path.join(output_dir, f"{safe_title}.{ext}")
+    n = 1
+    while os.path.exists(candidate):
+        candidate = os.path.join(output_dir, f"{safe_title} ({n}).{ext}")
+        n += 1
+    return candidate
+
+
 def download_video(
     url: str,
     quality: str,
     output_dir: str,
+    title: str,
     format_type: str = "video",
     on_progress: Optional[Callable[[dict], None]] = None,
-) -> None:
+) -> str:
+    ext = "mp3" if format_type == "audio" else "mp4"
+    # A literal resolved path (title decided up front, collision-checked
+    # against files already on disk) instead of yt-dlp's own %(title)s
+    # templating, so downloading the same video twice doesn't overwrite
+    # the first file - it gets "title (1).ext" instead.
+    output_path = _unique_path(output_dir, title, ext)
     ydl_opts = {
-        "outtmpl": f"{output_dir}/%(title)s.%(ext)s",
+        "outtmpl": output_path,
         "quiet": True,
         "socket_timeout": 15,
-        **CLIENT_ARGS,
         **SINGLE_VIDEO_ARGS,
     }
 
@@ -89,3 +102,5 @@ def download_video(
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
+
+    return output_path
