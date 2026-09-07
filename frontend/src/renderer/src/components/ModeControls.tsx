@@ -27,7 +27,7 @@ function ModeControls({
         <label>Tipo de descarga</label>
         <div className="toggle-switch">
           <span
-            className={`toggle-switch__option${mode === 'sencilla' ? ' toggle-switch__option--active' : ''}`}
+            className={`toggle-switch__option toggle-switch__option--sencilla${mode === 'sencilla' ? ' toggle-switch__option--active' : ''}`}
           >
             Sencilla
           </span>
@@ -40,7 +40,7 @@ function ModeControls({
             <span className="toggle__knob" />
           </button>
           <span
-            className={`toggle-switch__option${mode === 'avanzada' ? ' toggle-switch__option--active' : ''}`}
+            className={`toggle-switch__option toggle-switch__option--avanzada${mode === 'avanzada' ? ' toggle-switch__option--active' : ''}`}
           >
             Avanzada
           </span>
