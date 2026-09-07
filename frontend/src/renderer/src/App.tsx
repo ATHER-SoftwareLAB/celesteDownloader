@@ -11,11 +11,8 @@ import Footer from './components/Footer'
 import type { VideoMetadata } from '../../shared/ipc-types'
 import './App.css'
 
-const MOCK_HISTORY: HistoryEntry[] = [
-  { title: 'TITULO DE VIDEO 1', format: 'Video 1080p', path: 'c:/descargas' },
-  { title: 'TITULO DE VIDEO 2', format: 'Video 1080p', path: 'c:/videos' },
-  { title: 'TITULO DE VIDEO 3', format: 'Video 1080p', path: 'c:/desktop' }
-]
+// Session-only history (no persistence): cleared whenever the app restarts.
+const MAX_HISTORY_ENTRIES = 20
 
 function App(): JSX.Element {
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null)
@@ -27,6 +24,7 @@ function App(): JSX.Element {
   )
   const [error, setError] = useState('')
   const [downloadPath, setDownloadPath] = useState('')
+  const [history, setHistory] = useState<HistoryEntry[]>([])
 
   const [mode, setMode] = useState<DownloadMode>('sencilla')
   const [format, setFormat] = useState('video')
@@ -40,8 +38,17 @@ function App(): JSX.Element {
   const queueWatcherRef = useRef<number | null>(null)
 
   useEffect(() => {
-    window.api.getDownloadPath().then(setDownloadPath)
+    window.api.getConfig().then((cfg) => {
+      if (!('error' in cfg)) setDownloadPath(cfg.download_path)
+    })
   }, [])
+
+  const handleChoosePath = async (): Promise<void> => {
+    const chosen = await window.api.chooseDownloadPath()
+    if (!chosen) return
+    const result = await window.api.setConfig({ download_path: chosen })
+    if (!('error' in result)) setDownloadPath(result.download_path)
+  }
 
   const handleGetInfo = async (url: string): Promise<void> => {
     setLoadingInfo(true)
@@ -59,7 +66,7 @@ function App(): JSX.Element {
     setMetadata(result)
   }
 
-  const pollProgress = (taskId: string): void => {
+  const pollProgress = (taskId: string, entry: HistoryEntry): void => {
     if (activePollRef.current !== null) clearInterval(activePollRef.current)
 
     const stop = (): void => {
@@ -81,6 +88,7 @@ function App(): JSX.Element {
 
       if (update.status === 'completed') {
         stop()
+        setHistory((prev) => [entry, ...prev].slice(0, MAX_HISTORY_ENTRIES))
       } else if (update.status === 'error') {
         stop()
         setError(update.error ?? 'La descarga falló')
@@ -120,18 +128,21 @@ function App(): JSX.Element {
     setProgress(0)
     setTaskStatus('pending')
 
-    const result = await window.api.download(
-      metadata.url,
-      format,
-      mode === 'avanzada' ? quality : '1080'
-    )
+    const resolvedQuality = mode === 'avanzada' ? quality : '1080'
+    const result = await window.api.download(metadata.url, format, resolvedQuality)
 
     if ('error' in result || !result.success) {
       setDownloading(false)
       setError('error' in result ? result.error : 'La descarga falló')
       return
     }
-    pollProgress(result.task_id)
+
+    const entry: HistoryEntry = {
+      title: metadata.title,
+      format: format === 'audio' ? 'Audio' : `Video ${resolvedQuality}p`,
+      path: downloadPath
+    }
+    pollProgress(result.task_id, entry)
     ensureQueueWatcher()
   }
 
@@ -160,7 +171,7 @@ function App(): JSX.Element {
         onQualityChange={setQuality}
       />
 
-      <DownloadPathRow path={downloadPath} onChoosePath={() => {}} />
+      <DownloadPathRow path={downloadPath} onChoosePath={handleChoosePath} />
 
       <DownloadRow
         disabled={!metadata}
@@ -178,7 +189,7 @@ function App(): JSX.Element {
 
       {error && <p className="app__error">{error}</p>}
 
-      <HistorySection items={MOCK_HISTORY} />
+      <HistorySection items={history} />
 
       <Footer />
     </div>
