@@ -8,13 +8,18 @@ import DownloadRow from './components/DownloadRow'
 import QueueSection from './components/QueueSection'
 import HistorySection, { HistoryEntry } from './components/HistorySection'
 import Footer from './components/Footer'
+import AboutPage from './pages/AboutPage'
+import HowToPage from './pages/HowToPage'
 import type { VideoMetadata } from '../../shared/ipc-types'
 import './App.css'
 
 // Session-only history (no persistence): cleared whenever the app restarts.
 const MAX_HISTORY_ENTRIES = 20
 
+type View = 'main' | 'about' | 'howto'
+
 function App(): JSX.Element {
+  const [view, setView] = useState<View>('main')
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null)
   const [loadingInfo, setLoadingInfo] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -88,7 +93,8 @@ function App(): JSX.Element {
 
       if (update.status === 'completed') {
         stop()
-        setHistory((prev) => [entry, ...prev].slice(0, MAX_HISTORY_ENTRIES))
+        const finalEntry = update.path ? { ...entry, path: update.path } : entry
+        setHistory((prev) => [finalEntry, ...prev].slice(0, MAX_HISTORY_ENTRIES))
       } else if (update.status === 'error') {
         stop()
         setError(update.error ?? 'La descarga falló')
@@ -121,6 +127,10 @@ function App(): JSX.Element {
     else await window.api.pauseQueue()
   }
 
+  const handleOpenFolder = (path: string): void => {
+    window.api.openInFolder(path)
+  }
+
   const handleDownload = async (): Promise<void> => {
     if (!metadata) return
     setDownloading(true)
@@ -129,7 +139,7 @@ function App(): JSX.Element {
     setTaskStatus('pending')
 
     const resolvedQuality = mode === 'avanzada' ? quality : '1080'
-    const result = await window.api.download(metadata.url, format, resolvedQuality)
+    const result = await window.api.download(metadata.url, format, resolvedQuality, metadata.title)
 
     if ('error' in result || !result.success) {
       setDownloading(false)
@@ -140,7 +150,8 @@ function App(): JSX.Element {
     const entry: HistoryEntry = {
       title: metadata.title,
       format: format === 'audio' ? 'Audio' : `Video ${resolvedQuality}p`,
-      path: downloadPath
+      path: downloadPath,
+      thumbnail: metadata.thumbnail
     }
     pollProgress(result.task_id, entry)
     ensureQueueWatcher()
@@ -153,6 +164,24 @@ function App(): JSX.Element {
         ? 'Procesando...'
         : `Descargando... ${progress}%`
     : `${progress}%`
+
+  if (view === 'about') {
+    return (
+      <div className="app">
+        <Header />
+        <AboutPage onBack={() => setView('main')} />
+      </div>
+    )
+  }
+
+  if (view === 'howto') {
+    return (
+      <div className="app">
+        <Header />
+        <HowToPage onBack={() => setView('main')} />
+      </div>
+    )
+  }
 
   return (
     <div className="app">
@@ -189,9 +218,9 @@ function App(): JSX.Element {
 
       {error && <p className="app__error">{error}</p>}
 
-      <HistorySection items={history} />
+      <HistorySection items={history} onOpenFolder={handleOpenFolder} />
 
-      <Footer />
+      <Footer onAboutClick={() => setView('about')} onHowToClick={() => setView('howto')} />
     </div>
   )
 }
