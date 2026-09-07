@@ -4,7 +4,8 @@ import type {
   ApiError,
   DownloadResponse,
   DownloadProgress,
-  QueueStatus
+  QueueStatus,
+  Config
 } from '../shared/ipc-types'
 
 const api = {
@@ -18,7 +19,10 @@ const api = {
   getQueue: (): Promise<QueueStatus | ApiError> => ipcRenderer.invoke('getQueue'),
   pauseQueue: (): Promise<{ paused: boolean }> => ipcRenderer.invoke('pauseQueue'),
   resumeQueue: (): Promise<{ paused: boolean }> => ipcRenderer.invoke('resumeQueue'),
-  getDownloadPath: (): Promise<string> => ipcRenderer.invoke('getDownloadPath')
+  getConfig: (): Promise<Config | ApiError> => ipcRenderer.invoke('getConfig'),
+  setConfig: (updates: Partial<Config>): Promise<Config | ApiError> =>
+    ipcRenderer.invoke('setConfig', updates),
+  chooseDownloadPath: (): Promise<string | null> => ipcRenderer.invoke('chooseDownloadPath')
 }
 
 contextBridge.exposeInMainWorld('api', api)

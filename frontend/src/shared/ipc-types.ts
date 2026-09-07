@@ -42,3 +42,11 @@ export interface QueueStatus {
   queue: QueueItem[]
   paused: boolean
 }
+
+export interface Config {
+  download_path: string
+  theme: string
+  auto_retries: boolean
+  max_retries: number
+  metadata_cache_ttl: number
+}

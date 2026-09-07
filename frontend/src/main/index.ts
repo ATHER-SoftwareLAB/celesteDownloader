@@ -1,7 +1,9 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { join } from 'path'
 
 const BACKEND_URL = 'http://127.0.0.1:5000'
+
+let mainWindow: BrowserWindow | null = null
 
 async function backendFetch(path: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
   const controller = new AbortController()
@@ -14,7 +16,7 @@ async function backendFetch(path: string, timeoutMs: number, init?: RequestInit)
 }
 
 function createWindow(): void {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 650,
     minWidth: 900,
@@ -27,9 +29,9 @@ function createWindow(): void {
   })
 
   if (process.env.ELECTRON_RENDERER_URL) {
-    win.loadURL(process.env.ELECTRON_RENDERER_URL)
+    mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
+    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
@@ -52,7 +54,34 @@ ipcMain.handle('getInfo', async (_event, url: string) => {
   }
 })
 
-ipcMain.handle('getDownloadPath', () => app.getPath('downloads'))
+ipcMain.handle('getConfig', async () => {
+  try {
+    const res = await backendFetch('/config', 5_000)
+    return res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
+})
+
+ipcMain.handle('setConfig', async (_event, updates: Record<string, unknown>) => {
+  try {
+    const res = await backendFetch('/config', 5_000, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    })
+    return res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
+})
+
+ipcMain.handle('chooseDownloadPath', async () => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] })
+  if (result.canceled || result.filePaths.length === 0) return null
+  return result.filePaths[0]
+})
 
 ipcMain.handle(
   'download',
