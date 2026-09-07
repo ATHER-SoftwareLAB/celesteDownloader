@@ -2,16 +2,16 @@ import os
 import threading
 import time
 import uuid
+from typing import Optional
 
 import yt_dlp
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from config import get_config, set_config
 from downloader import download_video, get_metadata
 
 app = FastAPI()
-
-DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
 
 # In-memory queue: one download processed at a time, in submission order.
 # tasks holds status/progress per task_id; pending holds ids waiting their turn;
@@ -62,10 +62,12 @@ def _process(task_id: str) -> None:
         task.update(update)
 
     try:
+        download_dir = get_config()["download_path"]
+        os.makedirs(download_dir, exist_ok=True)
         download_video(
             task["url"],
             task["quality"],
-            DOWNLOAD_DIR,
+            download_dir,
             format_type=task["format"],
             on_progress=on_progress,
         )
@@ -99,7 +101,6 @@ threading.Thread(target=_worker, daemon=True).start()
 @app.post("/download")
 def download(req: DownloadRequest):
     task_id = str(uuid.uuid4())
-    os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     tasks[task_id] = {
         "url": req.url,
         "quality": req.quality,
@@ -156,6 +157,25 @@ def resume_queue():
     global paused
     paused = False
     return {"paused": False}
+
+
+class ConfigUpdate(BaseModel):
+    download_path: Optional[str] = None
+    theme: Optional[str] = None
+    auto_retries: Optional[bool] = None
+    max_retries: Optional[int] = None
+    metadata_cache_ttl: Optional[int] = None
+
+
+@app.get("/config")
+def config_get():
+    return get_config()
+
+
+@app.post("/config")
+def config_set(update: ConfigUpdate):
+    updates = {k: v for k, v in update.model_dump().items() if v is not None}
+    return set_config(updates)
 
 
 if __name__ == "__main__":
