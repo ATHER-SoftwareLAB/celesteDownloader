@@ -122,6 +122,15 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Tests
+
+```bash
+# Backend
+cd backend
+pip install -r requirements-dev.txt
+pytest
+```
+
 ### Estructura de Carpetas
 
 ```
