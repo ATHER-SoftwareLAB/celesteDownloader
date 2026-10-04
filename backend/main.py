@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 import time
@@ -12,6 +13,7 @@ from config import get_config, set_config
 from downloader import download_video, get_metadata
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 
 # In-memory queue: one download processed at a time, in submission order.
 # tasks holds status/progress per task_id; pending holds ids waiting their turn;
@@ -79,6 +81,20 @@ def _process(task_id: str) -> None:
     except yt_dlp.utils.DownloadError as e:
         task["status"] = "error"
         task["error"] = friendly_error(str(e))
+    # Anything else (disk full, no write permission, ffmpeg failure...) must
+    # also end the task: if it escaped, it would kill the worker thread and
+    # leave this task and every queued one stuck until the backend restarts.
+    except OSError:
+        logger.exception("Error writing download for task %s", task_id)
+        task["status"] = "error"
+        task["error"] = (
+            "No se pudo guardar el archivo. Verifica que la carpeta de descargas "
+            "exista y tengas permisos de escritura"
+        )
+    except Exception:
+        logger.exception("Unexpected error processing task %s", task_id)
+        task["status"] = "error"
+        task["error"] = "Ocurrió un error inesperado durante la descarga"
     finally:
         with queue_lock:
             current_id = None
