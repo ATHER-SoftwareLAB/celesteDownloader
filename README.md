@@ -32,7 +32,7 @@ Una UI moderna y elegante para descargar videos de YouTube sin usar terminal, ba
 - **Comunicación:** IPC (Inter-Process Communication)
 - **Descarga:** yt-dlp + ffmpeg
 - **Configuración:** SQLite (local)
-- **Testing:** pytest, Jest
+- **Testing:** pytest, Vitest
 - **CI/CD:** GitHub Actions
 
 ## Documentación
@@ -129,6 +129,10 @@ python main.py
 cd backend
 pip install -r requirements-dev.txt
 pytest
+
+# Frontend
+cd frontend
+npm test
 ```
 
 ### Estructura de Carpetas
