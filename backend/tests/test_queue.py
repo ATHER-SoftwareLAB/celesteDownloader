@@ -2,6 +2,7 @@ import time
 
 import pytest
 
+import config
 import main
 
 TERMINAL_STATUSES = {"completed", "error"}
@@ -9,7 +10,9 @@ TERMINAL_STATUSES = {"completed", "error"}
 
 @pytest.fixture
 def fake_env(monkeypatch, tmp_path):
-    monkeypatch.setattr(main, "get_config", lambda: {"download_path": str(tmp_path)})
+    monkeypatch.setattr(
+        main, "get_config", lambda: {**config.DEFAULTS, "download_path": str(tmp_path)}
+    )
     monkeypatch.setattr(main, "paused", False)
     return tmp_path
 
