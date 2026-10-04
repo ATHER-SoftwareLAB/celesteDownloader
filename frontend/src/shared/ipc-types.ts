@@ -4,6 +4,7 @@ export interface VideoFormat {
 }
 
 export interface VideoMetadata {
+  type: 'video'
   url: string
   title: string
   duration: number
@@ -12,6 +13,27 @@ export interface VideoMetadata {
   thumbnail: string
   formats: VideoFormat[]
 }
+
+export interface PlaylistEntry {
+  url: string
+  title: string
+  duration: number | null
+  thumbnail: string | null
+}
+
+export interface PlaylistMetadata {
+  type: 'playlist'
+  url: string
+  title: string
+  uploader: string | null
+  /** Channels list only their most recent videos. */
+  is_channel: boolean
+  /** Private or deleted videos left out of `entries`. */
+  unavailable_count: number
+  entries: PlaylistEntry[]
+}
+
+export type MediaMetadata = VideoMetadata | PlaylistMetadata
 
 export interface ApiError {
   error: string
@@ -34,6 +56,10 @@ export interface DownloadProgress {
   max_retries?: number
   error?: string
   path?: string
+}
+
+export interface ProgressBatch {
+  tasks: DownloadProgress[]
 }
 
 export interface QueueItem {

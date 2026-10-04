@@ -1,22 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ApiError, DownloadProgress } from '../../../shared/ipc-types'
-import { trackTask, TaskHandlers } from './downloadTracker'
-
-type Response = DownloadProgress | ApiError
+import type { ApiError, DownloadProgress, ProgressBatch } from '../../../shared/ipc-types'
+import { createTaskTracker, TaskHandlers } from './downloadTracker'
 
 function progress(taskId: string, status: DownloadProgress['status'], pct: number): DownloadProgress {
   return { task_id: taskId, status, progress: pct }
 }
 
-/** Fake backend that answers each task with its scripted responses, in order. */
-function fakeBackend(script: Record<string, Response[]>) {
-  const calls: string[] = []
-  const fetchProgress = vi.fn(async (taskId: string): Promise<Response> => {
-    calls.push(taskId)
-    const responses = script[taskId]
-    return responses.length > 1 ? responses.shift()! : responses[0]
-  })
-  return { fetchProgress, calls }
+/** Fake backend: answers each requested task with its next scripted update. */
+function fakeBackend(script: Record<string, DownloadProgress[]>) {
+  return vi.fn(async (taskIds: string[]): Promise<ProgressBatch | ApiError> => ({
+    tasks: taskIds.map((id) => {
+      const updates = script[id]
+      return updates.length > 1 ? updates.shift()! : updates[0]
+    })
+  }))
 }
 
 function spyHandlers(): TaskHandlers & {
@@ -27,7 +24,7 @@ function spyHandlers(): TaskHandlers & {
   return { onProgress: vi.fn(), onCompleted: vi.fn(), onError: vi.fn() }
 }
 
-describe('trackTask', () => {
+describe('createTaskTracker', () => {
   beforeEach(() => {
     vi.useFakeTimers()
   })
@@ -37,12 +34,12 @@ describe('trackTask', () => {
   })
 
   it('reports progress until completion, then stops polling', async () => {
-    const { fetchProgress } = fakeBackend({
+    const fetchProgress = fakeBackend({
       a: [progress('a', 'downloading', 40), progress('a', 'completed', 100)]
     })
     const handlers = spyHandlers()
 
-    trackTask('a', fetchProgress, handlers, 500)
+    createTaskTracker(fetchProgress, 500).track('a', handlers)
     await vi.advanceTimersByTimeAsync(500)
     expect(handlers.onProgress).toHaveBeenCalledWith(progress('a', 'downloading', 40))
 
@@ -53,6 +50,23 @@ describe('trackTask', () => {
     expect(fetchProgress).toHaveBeenCalledTimes(2)
   })
 
+  it('polls every tracked task in a single request', async () => {
+    const fetchProgress = fakeBackend({
+      a: [progress('a', 'downloading', 10)],
+      b: [progress('b', 'pending', 0)],
+      c: [progress('c', 'pending', 0)]
+    })
+    const tracker = createTaskTracker(fetchProgress, 500)
+
+    tracker.track('a', spyHandlers())
+    tracker.track('b', spyHandlers())
+    tracker.track('c', spyHandlers())
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(fetchProgress).toHaveBeenCalledTimes(1)
+    expect(fetchProgress).toHaveBeenCalledWith(['a', 'b', 'c'])
+  })
+
   it('passes retry information through with progress updates', async () => {
     const retrying: DownloadProgress = {
       task_id: 'a',
@@ -61,17 +75,17 @@ describe('trackTask', () => {
       retry: 1,
       max_retries: 3
     }
-    const { fetchProgress } = fakeBackend({ a: [retrying, progress('a', 'completed', 100)] })
+    const fetchProgress = fakeBackend({ a: [retrying, progress('a', 'completed', 100)] })
     const handlers = spyHandlers()
 
-    trackTask('a', fetchProgress, handlers, 500)
+    createTaskTracker(fetchProgress, 500).track('a', handlers)
     await vi.advanceTimersByTimeAsync(500)
 
     expect(handlers.onProgress).toHaveBeenCalledWith(retrying)
   })
 
   it('keeps following an earlier task after a new one is tracked', async () => {
-    const { fetchProgress } = fakeBackend({
+    const fetchProgress = fakeBackend({
       a: [progress('a', 'downloading', 50), progress('a', 'completed', 100)],
       b: [
         progress('b', 'pending', 0),
@@ -82,10 +96,11 @@ describe('trackTask', () => {
     })
     const first = spyHandlers()
     const second = spyHandlers()
+    const tracker = createTaskTracker(fetchProgress, 500)
 
-    trackTask('a', fetchProgress, first, 500)
+    tracker.track('a', first)
     await vi.advanceTimersByTimeAsync(250)
-    trackTask('b', fetchProgress, second, 500)
+    tracker.track('b', second)
     await vi.advanceTimersByTimeAsync(5000)
 
     expect(first.onCompleted).toHaveBeenCalledTimes(1)
@@ -95,61 +110,86 @@ describe('trackTask', () => {
   })
 
   it('reports a failed download with the backend message', async () => {
-    const { fetchProgress } = fakeBackend({
+    const fetchProgress = fakeBackend({
       a: [{ task_id: 'a', status: 'error', progress: 0, error: 'El video no está disponible' }]
     })
     const handlers = spyHandlers()
 
-    trackTask('a', fetchProgress, handlers, 500)
+    createTaskTracker(fetchProgress, 500).track('a', handlers)
     await vi.advanceTimersByTimeAsync(5000)
 
     expect(handlers.onError).toHaveBeenCalledExactlyOnceWith('El video no está disponible')
     expect(fetchProgress).toHaveBeenCalledTimes(1)
   })
 
-  it('reports an API error (e.g. backend unreachable) and stops', async () => {
-    const { fetchProgress } = fakeBackend({
-      a: [{ error: 'No se pudo conectar con el backend' }]
-    })
-    const handlers = spyHandlers()
+  it('fails every tracked task when the backend is unreachable', async () => {
+    const fetchProgress = vi.fn(
+      async (): Promise<ProgressBatch | ApiError> => ({ error: 'No se pudo conectar con el backend' })
+    )
+    const first = spyHandlers()
+    const second = spyHandlers()
+    const tracker = createTaskTracker(fetchProgress, 500)
 
-    trackTask('a', fetchProgress, handlers, 500)
+    tracker.track('a', first)
+    tracker.track('b', second)
     await vi.advanceTimersByTimeAsync(5000)
 
-    expect(handlers.onError).toHaveBeenCalledExactlyOnceWith('No se pudo conectar con el backend')
+    expect(first.onError).toHaveBeenCalledExactlyOnceWith('No se pudo conectar con el backend')
+    expect(second.onError).toHaveBeenCalledExactlyOnceWith('No se pudo conectar con el backend')
     expect(fetchProgress).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps working after a request rejects', async () => {
+    const fetchProgress = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('ipc failed'))
+      .mockResolvedValue({ tasks: [progress('b', 'completed', 100)] })
+    const first = spyHandlers()
+    const second = spyHandlers()
+    const tracker = createTaskTracker(fetchProgress, 500)
+
+    tracker.track('a', first)
+    await vi.advanceTimersByTimeAsync(500)
+    tracker.track('b', second)
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(first.onError).toHaveBeenCalledExactlyOnceWith('No se pudo conectar con el backend')
+    expect(second.onCompleted).toHaveBeenCalledTimes(1)
   })
 
   it('does not overlap polls while a response is slow', async () => {
-    let resolveSlow: (r: Response) => void = () => {}
+    let resolveSlow: (r: ProgressBatch) => void = () => {}
     const fetchProgress = vi.fn(
-      () => new Promise<Response>((resolve) => (resolveSlow = resolve))
+      () => new Promise<ProgressBatch | ApiError>((resolve) => (resolveSlow = resolve))
     )
     const handlers = spyHandlers()
+    const tracker = createTaskTracker(fetchProgress, 500)
 
-    trackTask('a', fetchProgress, handlers, 500)
+    tracker.track('a', handlers)
+    await vi.advanceTimersByTimeAsync(500)
+    tracker.track('b', spyHandlers())
     await vi.advanceTimersByTimeAsync(5000)
     expect(fetchProgress).toHaveBeenCalledTimes(1)
 
-    resolveSlow(progress('a', 'completed', 100))
-    await vi.advanceTimersByTimeAsync(5000)
+    resolveSlow({ tasks: [progress('a', 'completed', 100)] })
+    await vi.advanceTimersByTimeAsync(0)
     expect(handlers.onCompleted).toHaveBeenCalledTimes(1)
-    expect(fetchProgress).toHaveBeenCalledTimes(1)
   })
 
-  it('ignores a response that arrives after stop()', async () => {
-    let resolveSlow: (r: Response) => void = () => {}
+  it('ignores a response that arrives after stop() and stops polling', async () => {
+    let resolveSlow: (r: ProgressBatch) => void = () => {}
     const fetchProgress = vi.fn(
-      () => new Promise<Response>((resolve) => (resolveSlow = resolve))
+      () => new Promise<ProgressBatch | ApiError>((resolve) => (resolveSlow = resolve))
     )
     const handlers = spyHandlers()
 
-    const stop = trackTask('a', fetchProgress, handlers, 500)
+    const stop = createTaskTracker(fetchProgress, 500).track('a', handlers)
     await vi.advanceTimersByTimeAsync(500)
     stop()
-    resolveSlow(progress('a', 'completed', 100))
+    resolveSlow({ tasks: [progress('a', 'completed', 100)] })
     await vi.advanceTimersByTimeAsync(5000)
 
     expect(handlers.onCompleted).not.toHaveBeenCalled()
+    expect(fetchProgress).toHaveBeenCalledTimes(1)
   })
 })

@@ -353,6 +353,151 @@ body {
   background: #48494c;
 }
 
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.modal {
+  width: min(480px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--surface-soft);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal__title {
+  margin: 0;
+  font-size: 18px;
+  color: var(--accent);
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.modal__btn {
+  padding: 10px 20px;
+  background: var(--surface);
+  border: none;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modal__btn:hover:not(:disabled) {
+  background: #48494c;
+}
+
+.modal__btn--primary {
+  background: var(--accent-deep);
+}
+
+.modal__btn--primary:hover:not(:disabled) {
+  background: var(--accent);
+}
+
+.modal__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.modal__btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Playlist modal */
+.playlist-modal__summary {
+  padding: 12px 16px;
+  background: var(--surface);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.playlist-modal__summary p {
+  margin: 0 0 4px;
+}
+
+.playlist-modal__summary p:last-child {
+  margin-bottom: 0;
+}
+
+.playlist-modal__name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.playlist-modal__options {
+  margin: 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.playlist-modal__options legend {
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.playlist-modal__options label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.playlist-modal__options input[type='radio'] {
+  accent-color: var(--accent);
+}
+
+.playlist-modal__number {
+  width: 72px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: none;
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.playlist-modal__number:focus {
+  outline: 2px solid var(--accent);
+}
+
+.playlist-modal__note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.playlist-modal__error {
+  margin: 0;
+  font-size: 13px;
+  color: #ff8a8a;
+}
+
 /* Error */
 .app__error {
   margin-bottom: 16px;

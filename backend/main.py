@@ -238,11 +238,10 @@ def download(req: DownloadRequest):
     return {"success": True, "task_id": task_id, "status": "queued", "position": position}
 
 
-@app.get("/progress/{task_id}")
-def progress(task_id: str):
-    task = tasks.get(task_id)
-    if task is None:
-        return {"error": "Tarea no encontrada"}
+TASK_NOT_FOUND = "Tarea no encontrada"
+
+
+def _progress_report(task_id: str, task: dict) -> dict:
     return {
         "task_id": task_id,
         "status": task["status"],
@@ -252,6 +251,34 @@ def progress(task_id: str):
         **({"error": task["error"]} if "error" in task else {}),
         **({"path": task["path"]} if "path" in task else {}),
     }
+
+
+@app.get("/progress/{task_id}")
+def progress(task_id: str):
+    task = tasks.get(task_id)
+    if task is None:
+        return {"error": TASK_NOT_FOUND}
+    return _progress_report(task_id, task)
+
+
+class ProgressBatchRequest(BaseModel):
+    task_ids: list[str]
+
+
+@app.post("/progress/batch")
+def progress_batch(req: ProgressBatchRequest):
+    """Progress of several tasks in one request (a playlist can queue hundreds)."""
+    reports = []
+    for task_id in req.task_ids:
+        task = tasks.get(task_id)
+        if task is None:
+            reports.append(
+                {"task_id": task_id, "status": "error", "progress": 0, "retry": 0,
+                 "error": TASK_NOT_FOUND}
+            )
+        else:
+            reports.append(_progress_report(task_id, task))
+    return {"tasks": reports}
 
 
 @app.get("/queue")

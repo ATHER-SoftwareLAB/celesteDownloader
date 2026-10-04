@@ -1,16 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
-  VideoMetadata,
+  MediaMetadata,
   ApiError,
   DownloadResponse,
   DownloadProgress,
+  ProgressBatch,
   QueueStatus,
   Config
 } from '../shared/ipc-types'
 
 const api = {
   ping: (): Promise<{ message: string }> => ipcRenderer.invoke('ping'),
-  getInfo: (url: string): Promise<VideoMetadata | ApiError> =>
+  getInfo: (url: string): Promise<MediaMetadata | ApiError> =>
     ipcRenderer.invoke('getInfo', url),
   download: (
     url: string,
@@ -21,6 +22,8 @@ const api = {
     ipcRenderer.invoke('download', { url, format, quality, title }),
   getProgress: (taskId: string): Promise<DownloadProgress | ApiError> =>
     ipcRenderer.invoke('getProgress', taskId),
+  getProgressBatch: (taskIds: string[]): Promise<ProgressBatch | ApiError> =>
+    ipcRenderer.invoke('getProgressBatch', taskIds),
   getQueue: (): Promise<QueueStatus | ApiError> => ipcRenderer.invoke('getQueue'),
   pauseQueue: (): Promise<{ paused: boolean }> => ipcRenderer.invoke('pauseQueue'),
   resumeQueue: (): Promise<{ paused: boolean }> => ipcRenderer.invoke('resumeQueue'),

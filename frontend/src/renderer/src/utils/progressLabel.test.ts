@@ -26,6 +26,13 @@ describe('progressLabel', () => {
     expect(progressLabel({ ...base, status: 'processing', progress: 100 })).toBe('Procesando...')
   })
 
+  it('shows how many videos of a playlist are done', () => {
+    expect(progressLabel({ ...base, batch: { done: 3, total: 10 } })).toBe('Playlist: 3 de 10')
+    expect(progressLabel({ ...base, downloading: false, batch: { done: 10, total: 10 } })).toBe(
+      'Playlist: 10 de 10'
+    )
+  })
+
   it('shows only the percentage when idle', () => {
     expect(progressLabel({ ...base, downloading: false, progress: 100 })).toBe('100%')
   })
