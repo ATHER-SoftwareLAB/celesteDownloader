@@ -11,6 +11,7 @@ import Footer from './components/Footer'
 import AboutPage from './pages/AboutPage'
 import HowToPage from './pages/HowToPage'
 import type { VideoMetadata } from '../../shared/ipc-types'
+import { trackTask } from './services/downloadTracker'
 import './App.css'
 
 // Session-only history (no persistence): cleared whenever the app restarts.
@@ -39,7 +40,7 @@ function App(): JSX.Element {
   const [queuePendingCount, setQueuePendingCount] = useState(0)
   const [queueCurrentProgress, setQueueCurrentProgress] = useState<number | null>(null)
 
-  const activePollRef = useRef<number | null>(null)
+  const latestTaskRef = useRef<string | null>(null)
   const queueWatcherRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -71,38 +72,32 @@ function App(): JSX.Element {
     setMetadata(result)
   }
 
+  // Every queued download is followed until it finishes, so each one lands in
+  // history (or shows its error) even after newer downloads are queued. The
+  // progress bar shows the most recently queued download.
   const pollProgress = (taskId: string, entry: HistoryEntry): void => {
-    if (activePollRef.current !== null) clearInterval(activePollRef.current)
+    latestTaskRef.current = taskId
+    const isLatest = (): boolean => latestTaskRef.current === taskId
 
-    const stop = (): void => {
-      clearInterval(interval)
-      activePollRef.current = null
-      setDownloading(false)
-    }
-
-    const interval = window.setInterval(async () => {
-      const update = await window.api.getProgress(taskId)
-
-      if (!('status' in update)) {
-        stop()
-        setError(update.error)
-        return
-      }
-
-      setProgress(update.progress)
-
-      if (update.status === 'completed') {
-        stop()
+    trackTask(taskId, window.api.getProgress, {
+      onProgress: (status, pct) => {
+        if (!isLatest()) return
+        setProgress(pct)
+        setTaskStatus(status)
+      },
+      onCompleted: (update) => {
+        if (isLatest()) {
+          setProgress(update.progress)
+          setDownloading(false)
+        }
         const finalEntry = update.path ? { ...entry, path: update.path } : entry
         setHistory((prev) => [finalEntry, ...prev].slice(0, MAX_HISTORY_ENTRIES))
-      } else if (update.status === 'error') {
-        stop()
-        setError(update.error ?? 'La descarga falló')
-      } else {
-        setTaskStatus(update.status)
+      },
+      onError: (message) => {
+        if (isLatest()) setDownloading(false)
+        setError(message)
       }
-    }, 500)
-    activePollRef.current = interval
+    })
   }
 
   const ensureQueueWatcher = (): void => {
