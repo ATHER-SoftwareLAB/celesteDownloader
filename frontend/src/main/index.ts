@@ -35,15 +35,23 @@ function createWindow(): void {
   }
 }
 
+// Handlers `return await res.json()` (not just `return res.json()`) so a
+// non-JSON body - e.g. a plain-text 500 from the backend - is caught by the
+// surrounding try instead of rejecting the renderer's invoke().
+
 ipcMain.handle('ping', async () => {
-  const res = await backendFetch('/ping', 5_000)
-  return res.json()
+  try {
+    const res = await backendFetch('/ping', 5_000)
+    return await res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
 })
 
 ipcMain.handle('getInfo', async (_event, url: string) => {
   try {
     const res = await backendFetch(`/info?url=${encodeURIComponent(url)}`, 20_000)
-    return res.json()
+    return await res.json()
   } catch (err) {
     const timedOut = err instanceof Error && err.name === 'AbortError'
     return {
@@ -57,7 +65,7 @@ ipcMain.handle('getInfo', async (_event, url: string) => {
 ipcMain.handle('getConfig', async () => {
   try {
     const res = await backendFetch('/config', 5_000)
-    return res.json()
+    return await res.json()
   } catch {
     return { error: 'No se pudo conectar con el backend' }
   }
@@ -70,7 +78,7 @@ ipcMain.handle('setConfig', async (_event, updates: Record<string, unknown>) => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
     })
-    return res.json()
+    return await res.json()
   } catch {
     return { error: 'No se pudo conectar con el backend' }
   }
@@ -96,7 +104,7 @@ ipcMain.handle(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(opts)
       })
-      return res.json()
+      return await res.json()
     } catch (err) {
       const timedOut = err instanceof Error && err.name === 'AbortError'
       return {
@@ -109,7 +117,7 @@ ipcMain.handle(
 ipcMain.handle('getProgress', async (_event, taskId: string) => {
   try {
     const res = await backendFetch(`/progress/${taskId}`, 5_000)
-    return res.json()
+    return await res.json()
   } catch {
     return { error: 'No se pudo conectar con el backend' }
   }
@@ -131,20 +139,28 @@ ipcMain.handle('getProgressBatch', async (_event, taskIds: string[]) => {
 ipcMain.handle('getQueue', async () => {
   try {
     const res = await backendFetch('/queue', 5_000)
-    return res.json()
+    return await res.json()
   } catch {
     return { error: 'No se pudo conectar con el backend' }
   }
 })
 
 ipcMain.handle('pauseQueue', async () => {
-  const res = await backendFetch('/queue/pause', 5_000, { method: 'POST' })
-  return res.json()
+  try {
+    const res = await backendFetch('/queue/pause', 5_000, { method: 'POST' })
+    return await res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
 })
 
 ipcMain.handle('resumeQueue', async () => {
-  const res = await backendFetch('/queue/resume', 5_000, { method: 'POST' })
-  return res.json()
+  try {
+    const res = await backendFetch('/queue/resume', 5_000, { method: 'POST' })
+    return await res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
 })
 
 app.whenReady().then(() => {

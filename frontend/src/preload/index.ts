@@ -10,7 +10,7 @@ import type {
 } from '../shared/ipc-types'
 
 const api = {
-  ping: (): Promise<{ message: string }> => ipcRenderer.invoke('ping'),
+  ping: (): Promise<{ message: string } | ApiError> => ipcRenderer.invoke('ping'),
   getInfo: (url: string): Promise<MediaMetadata | ApiError> =>
     ipcRenderer.invoke('getInfo', url),
   download: (
@@ -25,8 +25,8 @@ const api = {
   getProgressBatch: (taskIds: string[]): Promise<ProgressBatch | ApiError> =>
     ipcRenderer.invoke('getProgressBatch', taskIds),
   getQueue: (): Promise<QueueStatus | ApiError> => ipcRenderer.invoke('getQueue'),
-  pauseQueue: (): Promise<{ paused: boolean }> => ipcRenderer.invoke('pauseQueue'),
-  resumeQueue: (): Promise<{ paused: boolean }> => ipcRenderer.invoke('resumeQueue'),
+  pauseQueue: (): Promise<{ paused: boolean } | ApiError> => ipcRenderer.invoke('pauseQueue'),
+  resumeQueue: (): Promise<{ paused: boolean } | ApiError> => ipcRenderer.invoke('resumeQueue'),
   getConfig: (): Promise<Config | ApiError> => ipcRenderer.invoke('getConfig'),
   setConfig: (updates: Partial<Config>): Promise<Config | ApiError> =>
     ipcRenderer.invoke('setConfig', updates),
