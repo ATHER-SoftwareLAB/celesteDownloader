@@ -99,7 +99,8 @@ Una UI moderna y elegante para descargar videos de YouTube sin usar terminal, ba
 ### Pre-requisitos
 
 - Node.js 18+
-- Python 3.10+
+- Python 3.12 (3.14 no es compatible con las dependencias fijadas)
+- ffmpeg en el `PATH`
 - Git
 
 ### Setup Inicial
@@ -109,18 +110,20 @@ Una UI moderna y elegante para descargar videos de YouTube sin usar terminal, ba
 git clone <repo-url>
 cd celesteDownloader
 
-# Frontend setup
-cd frontend
-npm install
-npm run dev
-
-# Backend setup (en otra terminal)
+# Backend setup (una sola vez)
 cd backend
 python -m venv venv
 source venv/bin/activate  # o `venv\Scripts\activate` en Windows
 pip install -r requirements.txt
-python main.py
+cd ..
+
+# Frontend
+cd frontend
+npm install
+npm run dev
 ```
+
+`npm run dev` arranca el backend automáticamente con el Python de `backend/venv` y lo cierra al salir. Si ya hay un backend corriendo en `127.0.0.1:5000` (por ejemplo, lanzado a mano con `python main.py`), lo reutiliza.
 
 ### Tests
 
