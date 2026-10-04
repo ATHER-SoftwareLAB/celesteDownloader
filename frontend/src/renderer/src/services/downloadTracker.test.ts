@@ -44,13 +44,30 @@ describe('trackTask', () => {
 
     trackTask('a', fetchProgress, handlers, 500)
     await vi.advanceTimersByTimeAsync(500)
-    expect(handlers.onProgress).toHaveBeenCalledWith('downloading', 40)
+    expect(handlers.onProgress).toHaveBeenCalledWith(progress('a', 'downloading', 40))
 
     await vi.advanceTimersByTimeAsync(500)
     expect(handlers.onCompleted).toHaveBeenCalledWith(progress('a', 'completed', 100))
 
     await vi.advanceTimersByTimeAsync(5000)
     expect(fetchProgress).toHaveBeenCalledTimes(2)
+  })
+
+  it('passes retry information through with progress updates', async () => {
+    const retrying: DownloadProgress = {
+      task_id: 'a',
+      status: 'downloading',
+      progress: 0,
+      retry: 1,
+      max_retries: 3
+    }
+    const { fetchProgress } = fakeBackend({ a: [retrying, progress('a', 'completed', 100)] })
+    const handlers = spyHandlers()
+
+    trackTask('a', fetchProgress, handlers, 500)
+    await vi.advanceTimersByTimeAsync(500)
+
+    expect(handlers.onProgress).toHaveBeenCalledWith(retrying)
   })
 
   it('keeps following an earlier task after a new one is tracked', async () => {

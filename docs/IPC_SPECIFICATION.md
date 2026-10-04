@@ -52,6 +52,26 @@ Define los contratos (payloads y respuestas) entre Frontend (Electron/React) y B
 
 ---
 
+### `getProgress` — Progreso de una tarea
+
+**Response:**
+```json
+{
+  "task_id": "uuid",
+  "status": "downloading",
+  "progress": 35,
+  "retry": 1,
+  "max_retries": 3
+}
+```
+
+- `status`: `pending` | `downloading` | `processing` | `completed` | `error`
+- `retry`: reintentos hechos por errores recuperables (0 en el primer intento).
+- `max_retries`: límite de reintentos de la tarea; aparece cuando empieza a procesarse.
+- `error` (si `status` es `error`) y `path` (si `status` es `completed`).
+
+---
+
 ### 3. `addToQueue` — Agregar a Cola
 
 **Request:**

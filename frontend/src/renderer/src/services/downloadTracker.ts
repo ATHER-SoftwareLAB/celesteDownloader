@@ -3,9 +3,10 @@ import type { ApiError, DownloadProgress } from '../../../shared/ipc-types'
 const POLL_INTERVAL_MS = 500
 
 export type ActiveStatus = Exclude<DownloadProgress['status'], 'completed' | 'error'>
+export type ActiveProgress = DownloadProgress & { status: ActiveStatus }
 
 export interface TaskHandlers {
-  onProgress: (status: ActiveStatus, progress: number) => void
+  onProgress: (update: ActiveProgress) => void
   onCompleted: (update: DownloadProgress) => void
   onError: (message: string) => void
 }
@@ -41,7 +42,7 @@ export function trackTask(
       stopped = true
       handlers.onError(update.error ?? 'La descarga falló')
     } else {
-      handlers.onProgress(update.status, update.progress)
+      handlers.onProgress({ ...update, status: update.status })
       timer = setTimeout(poll, intervalMs)
     }
   }

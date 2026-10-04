@@ -1,4 +1,5 @@
 import pytest
+from yt_dlp.utils import DownloadError
 
 from main import friendly_error
 
@@ -13,4 +14,4 @@ from main import friendly_error
     ],
 )
 def test_friendly_error_maps_yt_dlp_messages(raw, expected):
-    assert friendly_error(raw) == expected
+    assert friendly_error(DownloadError(raw)) == expected

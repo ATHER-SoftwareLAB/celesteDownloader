@@ -28,6 +28,10 @@ export interface DownloadProgress {
   task_id: string
   status: 'pending' | 'downloading' | 'processing' | 'completed' | 'error'
   progress: number
+  /** Retries done so far for a recoverable error (0 on the first attempt). */
+  retry?: number
+  /** Retry limit for this task; present once processing has started. */
+  max_retries?: number
   error?: string
   path?: string
 }

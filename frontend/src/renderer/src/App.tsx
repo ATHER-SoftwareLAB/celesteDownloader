@@ -11,7 +11,8 @@ import Footer from './components/Footer'
 import AboutPage from './pages/AboutPage'
 import HowToPage from './pages/HowToPage'
 import type { VideoMetadata } from '../../shared/ipc-types'
-import { trackTask } from './services/downloadTracker'
+import { trackTask, type ActiveStatus } from './services/downloadTracker'
+import { progressLabel } from './utils/progressLabel'
 import './App.css'
 
 // Session-only history (no persistence): cleared whenever the app restarts.
@@ -25,9 +26,8 @@ function App(): JSX.Element {
   const [loadingInfo, setLoadingInfo] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [taskStatus, setTaskStatus] = useState<'pending' | 'downloading' | 'processing'>(
-    'downloading'
-  )
+  const [taskStatus, setTaskStatus] = useState<ActiveStatus>('downloading')
+  const [retry, setRetry] = useState({ count: 0, max: 0 })
   const [error, setError] = useState('')
   const [downloadPath, setDownloadPath] = useState('')
   const [history, setHistory] = useState<HistoryEntry[]>([])
@@ -80,10 +80,11 @@ function App(): JSX.Element {
     const isLatest = (): boolean => latestTaskRef.current === taskId
 
     trackTask(taskId, window.api.getProgress, {
-      onProgress: (status, pct) => {
+      onProgress: (update) => {
         if (!isLatest()) return
-        setProgress(pct)
-        setTaskStatus(status)
+        setProgress(update.progress)
+        setTaskStatus(update.status)
+        setRetry({ count: update.retry ?? 0, max: update.max_retries ?? 0 })
       },
       onCompleted: (update) => {
         if (isLatest()) {
@@ -132,6 +133,7 @@ function App(): JSX.Element {
     setError('')
     setProgress(0)
     setTaskStatus('pending')
+    setRetry({ count: 0, max: 0 })
 
     const resolvedQuality = mode === 'avanzada' ? quality : '1080'
     const result = await window.api.download(metadata.url, format, resolvedQuality, metadata.title)
@@ -152,13 +154,13 @@ function App(): JSX.Element {
     ensureQueueWatcher()
   }
 
-  const progressLabel = downloading
-    ? taskStatus === 'pending'
-      ? 'En cola...'
-      : progress >= 100
-        ? 'Procesando...'
-        : `Descargando... ${progress}%`
-    : `${progress}%`
+  const label = progressLabel({
+    downloading,
+    status: taskStatus,
+    progress,
+    retry: retry.count,
+    maxRetries: retry.max
+  })
 
   if (view === 'about') {
     return (
@@ -200,7 +202,7 @@ function App(): JSX.Element {
       <DownloadRow
         disabled={!metadata}
         progress={progress}
-        progressLabel={progressLabel}
+        progressLabel={label}
         onClick={handleDownload}
       />
 
