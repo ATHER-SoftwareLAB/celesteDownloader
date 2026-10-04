@@ -1,11 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
-
-const BACKEND_URL = 'http://127.0.0.1:5000'
+import { BACKEND_URL, startBackend, stopBackend } from './backend'
 
 let mainWindow: BrowserWindow | null = null
 
+// Resolves once the backend answers; every request waits for it, so the UI
+// can open while Python is still starting. Rejects if it can't start, which
+// the handlers report as "No se pudo conectar con el backend".
+let backendReady: Promise<void> = Promise.resolve()
+
 async function backendFetch(path: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
+  await backendReady
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -164,6 +169,10 @@ ipcMain.handle('resumeQueue', async () => {
 })
 
 app.whenReady().then(() => {
+  // In development the backend lives next to the frontend folder.
+  // TODO(packaging): resolve the bundled backend executable when app.isPackaged.
+  backendReady = startBackend(join(app.getAppPath(), '..', 'backend'))
+  backendReady.catch((err) => console.error('[backend]', err))
   createWindow()
 
   app.on('activate', () => {
@@ -173,4 +182,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('will-quit', () => {
+  stopBackend()
 })

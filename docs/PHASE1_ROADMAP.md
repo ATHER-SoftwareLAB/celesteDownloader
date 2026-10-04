@@ -14,6 +14,7 @@
 ✅ Configuración Persistente  
 ✅ Historial de Sesión  
 ✅ Reintentos Automáticos  
+✅ Descarga de Playlists (públicas; canales: últimos N videos)  
 ✅ Manejo de Errores  
 
 ---
@@ -124,6 +125,7 @@ def process_next():
 ✅ Modo sencillo: click descargar → video en 1080p  
 ✅ Modo avanzado: elijo formato y calidad  
 ✅ Cola procesa en serie  
+✅ Puedo descargar una playlist (todos, primeros N, últimos N o rango)  
 ✅ Reintentos automáticos funcionan  
 ✅ Configuración persiste  
 ✅ Errores claros  

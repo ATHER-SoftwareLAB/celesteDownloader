@@ -15,12 +15,12 @@ Una UI moderna y elegante para descargar videos de YouTube sin usar terminal, ba
 - **Cola de Descargas** — Procesadas en serie, no simultáneas
 - **Configuración Persistente** — Ubicación, temas, reintentos
 - **Historial de Sesión** — Últimas descargas (volátil)
-- **Reintentos Automáticos** — Con backoff exponencial
+- **Reintentos Automáticos** — Con backoff (3s → 6s → 10s)
+- **Descarga de Playlists** — Playlists públicas y canales (últimos N videos)
 - **Portabilidad** — ZIP sin instalación requerida
 
 ### Fase 2+ 
 
-- Descarga de playlists/listas
 - Soporte múltiples plataformas
 - Gestor de biblioteca
 - Sincronización en la nube
@@ -47,18 +47,18 @@ Una UI moderna y elegante para descargar videos de YouTube sin usar terminal, ba
 ## Roadmap
 
 ### Fase 1: MVP (2-3 semanas)
-- [ ] Setup Electron + React + Python
-- [ ] Modo descarga sencilla
-- [ ] Modo descarga avanzada
-- [ ] Cola de descargas
+- [x] Setup Electron + React + Python
+- [x] Modo descarga sencilla
+- [x] Modo descarga avanzada
+- [x] Cola de descargas
 - [ ] Configuración y persistencia
-- [ ] Historial de sesión
+- [x] Historial de sesión
 - [ ] Reintentos automáticos
+- [ ] Descarga de playlists
 - [ ] UI minimalista y elegante
 - [ ] Testing y build
 
 ### Fase 2: Core Features (3-4 semanas)
-- [ ] Descarga de listas/playlists
 - [ ] Mejoras de UI
 - [ ] Documentación de usuario
 - [ ] Tests adicionales
@@ -99,7 +99,8 @@ Una UI moderna y elegante para descargar videos de YouTube sin usar terminal, ba
 ### Pre-requisitos
 
 - Node.js 18+
-- Python 3.10+
+- Python 3.12 (3.14 no es compatible con las dependencias fijadas)
+- ffmpeg en el `PATH`
 - Git
 
 ### Setup Inicial
@@ -109,18 +110,20 @@ Una UI moderna y elegante para descargar videos de YouTube sin usar terminal, ba
 git clone <repo-url>
 cd celesteDownloader
 
-# Frontend setup
-cd frontend
-npm install
-npm run dev
-
-# Backend setup (en otra terminal)
+# Backend setup (una sola vez)
 cd backend
 python -m venv venv
 source venv/bin/activate  # o `venv\Scripts\activate` en Windows
 pip install -r requirements.txt
-python main.py
+cd ..
+
+# Frontend
+cd frontend
+npm install
+npm run dev
 ```
+
+`npm run dev` arranca el backend automáticamente con el Python de `backend/venv` y lo cierra al salir. Si ya hay un backend corriendo en `127.0.0.1:5000` (por ejemplo, lanzado a mano con `python main.py`), lo reutiliza.
 
 ### Tests
 

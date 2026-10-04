@@ -130,14 +130,15 @@ def _progress_hook(callback: Callable[[dict], None]):
     return hook
 
 
-def _unique_path(output_dir: str, title: str, ext: str) -> str:
+def _unique_base(output_dir: str, title: str, ext: str) -> str:
+    """Path without extension such that `<base>.<ext>` doesn't exist yet."""
     safe_title = sanitize_filename(title, restricted=False) or "descarga"
-    candidate = os.path.join(output_dir, f"{safe_title}.{ext}")
+    base = os.path.join(output_dir, safe_title)
     n = 1
-    while os.path.exists(candidate):
-        candidate = os.path.join(output_dir, f"{safe_title} ({n}).{ext}")
+    while os.path.exists(f"{base}.{ext}"):
+        base = os.path.join(output_dir, f"{safe_title} ({n})")
         n += 1
-    return candidate
+    return base
 
 
 def download_video(
@@ -149,13 +150,18 @@ def download_video(
     on_progress: Optional[Callable[[dict], None]] = None,
 ) -> str:
     ext = "mp3" if format_type == "audio" else "mp4"
-    # A literal resolved path (title decided up front, collision-checked
-    # against files already on disk) instead of yt-dlp's own %(title)s
-    # templating, so downloading the same video twice doesn't overwrite
-    # the first file - it gets "title (1).ext" instead.
-    output_path = _unique_path(output_dir, title, ext)
+    # Title decided up front and collision-checked against files already on
+    # disk instead of yt-dlp's own %(title)s templating, so downloading the
+    # same video twice doesn't overwrite the first file - it gets
+    # "title (1).ext" instead.
+    base = _unique_base(output_dir, title, ext)
     ydl_opts = {
-        "outtmpl": output_path,
+        # The extension is left to yt-dlp: it appends the real extension to
+        # any name whose extension doesn't match the downloaded stream, so a
+        # literal "title.mp3" ended up as "title.mp3.mp3" after audio
+        # extraction. "%" is doubled so a title like "100%" or "%(id)s" isn't
+        # read as a template field.
+        "outtmpl": base.replace("%", "%%") + ".%(ext)s",
         "quiet": True,
         "socket_timeout": 15,
         **SINGLE_VIDEO_ARGS,
@@ -178,6 +184,8 @@ def download_video(
         ydl_opts["progress_hooks"] = [_progress_hook(on_progress)]
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
+        info = ydl.extract_info(url, download=True)
 
-    return output_path
+    # Final file after merging/audio extraction, as reported by yt-dlp.
+    downloads = info.get("requested_downloads") or []
+    return downloads[0]["filepath"] if downloads else f"{base}.{ext}"
