@@ -15,9 +15,10 @@ Define los contratos (payloads y respuestas) entre Frontend (Electron/React) y B
 {"url": "https://www.youtube.com/watch?v=..."}
 ```
 
-**Response (Success):**
+**Response (Success, video):**
 ```json
 {
+  "type": "video",
   "url": "https://...",
   "title": "Video Title",
   "duration": 600,
@@ -30,6 +31,26 @@ Define los contratos (payloads y respuestas) entre Frontend (Electron/React) y B
   ]
 }
 ```
+
+**Response (Success, playlist o canal):**
+```json
+{
+  "type": "playlist",
+  "url": "https://www.youtube.com/playlist?list=...",
+  "title": "Mi playlist",
+  "uploader": "Canal X",
+  "is_channel": false,
+  "unavailable_count": 2,
+  "entries": [
+    {"url": "https://www.youtube.com/watch?v=...", "title": "Video 1", "duration": 235, "thumbnail": "https://..."}
+  ]
+}
+```
+
+- Una URL de video con `&list=` se trata como **video**.
+- Canales (`@handle`, `/channel/`, `/c/`, `/user/`): se listan los **50 videos más recientes** de la pestaña Videos (`is_channel: true`).
+- `entries` excluye videos privados o eliminados; `unavailable_count` dice cuántos se omitieron.
+- La selección (todos, primeros N, últimos N, rango) se hace en el frontend; cada video se encola con `download`.
 
 **Response (Error):**
 ```json
@@ -69,6 +90,29 @@ Define los contratos (payloads y respuestas) entre Frontend (Electron/React) y B
 - `retry`: reintentos hechos por errores recuperables (0 en el primer intento).
 - `max_retries`: límite de reintentos de la tarea; aparece cuando empieza a procesarse.
 - `error` (si `status` es `error`) y `path` (si `status` es `completed`).
+
+---
+
+### `getProgressBatch` — Progreso de varias tareas
+
+`POST /progress/batch`. El frontend lo usa para seguir todas las descargas activas con una sola petición (una playlist puede encolar cientos).
+
+**Request:**
+```json
+{"task_ids": ["uuid-1", "uuid-2"]}
+```
+
+**Response:**
+```json
+{
+  "tasks": [
+    {"task_id": "uuid-1", "status": "completed", "progress": 100, "retry": 0, "max_retries": 3, "path": "..."},
+    {"task_id": "uuid-2", "status": "error", "progress": 0, "retry": 0, "error": "Tarea no encontrada"}
+  ]
+}
+```
+
+Cada elemento tiene la forma de `getProgress`. Una tarea desconocida se devuelve con `status: "error"`.
 
 ---
 

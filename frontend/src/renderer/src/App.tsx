@@ -8,10 +8,11 @@ import DownloadRow from './components/DownloadRow'
 import QueueSection from './components/QueueSection'
 import HistorySection, { HistoryEntry } from './components/HistorySection'
 import Footer from './components/Footer'
+import PlaylistModal from './components/PlaylistModal'
 import AboutPage from './pages/AboutPage'
 import HowToPage from './pages/HowToPage'
-import type { VideoMetadata } from '../../shared/ipc-types'
-import { trackTask, type ActiveStatus } from './services/downloadTracker'
+import type { PlaylistEntry, PlaylistMetadata, VideoMetadata } from '../../shared/ipc-types'
+import { createTaskTracker, type ActiveStatus } from './services/downloadTracker'
 import { progressLabel } from './utils/progressLabel'
 import './App.css'
 
@@ -23,11 +24,13 @@ type View = 'main' | 'about' | 'howto'
 function App(): JSX.Element {
   const [view, setView] = useState<View>('main')
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null)
+  const [playlist, setPlaylist] = useState<PlaylistMetadata | null>(null)
   const [loadingInfo, setLoadingInfo] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [taskStatus, setTaskStatus] = useState<ActiveStatus>('downloading')
   const [retry, setRetry] = useState({ count: 0, max: 0 })
+  const [batch, setBatch] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState('')
   const [downloadPath, setDownloadPath] = useState('')
   const [history, setHistory] = useState<HistoryEntry[]>([])
@@ -40,8 +43,13 @@ function App(): JSX.Element {
   const [queuePendingCount, setQueuePendingCount] = useState(0)
   const [queueCurrentProgress, setQueueCurrentProgress] = useState<number | null>(null)
 
+  // What the progress bar follows: a single task id or a playlist batch id.
   const latestTaskRef = useRef<string | null>(null)
   const queueWatcherRef = useRef<number | null>(null)
+  const [tracker] = useState(() => createTaskTracker(window.api.getProgressBatch))
+
+  const resolvedQuality = mode === 'avanzada' ? quality : '1080'
+  const formatLabel = format === 'audio' ? 'Audio' : `Video ${resolvedQuality}p`
 
   useEffect(() => {
     window.api.getConfig().then((cfg) => {
@@ -60,6 +68,7 @@ function App(): JSX.Element {
     setLoadingInfo(true)
     setError('')
     setMetadata(null)
+    setPlaylist(null)
     setProgress(0)
 
     const result = await window.api.getInfo(url)
@@ -67,9 +76,16 @@ function App(): JSX.Element {
 
     if ('error' in result) {
       setError(result.error)
-      return
+    } else if (result.type === 'playlist') {
+      setPlaylist(result)
+    } else {
+      setMetadata(result)
     }
-    setMetadata(result)
+  }
+
+  const addToHistory = (entry: HistoryEntry, path?: string): void => {
+    const finalEntry = path ? { ...entry, path } : entry
+    setHistory((prev) => [finalEntry, ...prev].slice(0, MAX_HISTORY_ENTRIES))
   }
 
   // Every queued download is followed until it finishes, so each one lands in
@@ -79,7 +95,7 @@ function App(): JSX.Element {
     latestTaskRef.current = taskId
     const isLatest = (): boolean => latestTaskRef.current === taskId
 
-    trackTask(taskId, window.api.getProgress, {
+    tracker.track(taskId, {
       onProgress: (update) => {
         if (!isLatest()) return
         setProgress(update.progress)
@@ -91,8 +107,7 @@ function App(): JSX.Element {
           setProgress(update.progress)
           setDownloading(false)
         }
-        const finalEntry = update.path ? { ...entry, path: update.path } : entry
-        setHistory((prev) => [finalEntry, ...prev].slice(0, MAX_HISTORY_ENTRIES))
+        addToHistory(entry, update.path)
       },
       onError: (message) => {
         if (isLatest()) setDownloading(false)
@@ -134,8 +149,8 @@ function App(): JSX.Element {
     setProgress(0)
     setTaskStatus('pending')
     setRetry({ count: 0, max: 0 })
+    setBatch(null)
 
-    const resolvedQuality = mode === 'avanzada' ? quality : '1080'
     const result = await window.api.download(metadata.url, format, resolvedQuality, metadata.title)
 
     if ('error' in result || !result.success) {
@@ -146,7 +161,7 @@ function App(): JSX.Element {
 
     const entry: HistoryEntry = {
       title: metadata.title,
-      format: format === 'audio' ? 'Audio' : `Video ${resolvedQuality}p`,
+      format: formatLabel,
       path: downloadPath,
       thumbnail: metadata.thumbnail
     }
@@ -154,12 +169,63 @@ function App(): JSX.Element {
     ensureQueueWatcher()
   }
 
+  // Queues each selected video as its own download. The progress bar counts
+  // finished videos (completed or failed) of this playlist.
+  const handleDownloadPlaylist = async (entries: PlaylistEntry[]): Promise<void> => {
+    setPlaylist(null)
+    setError('')
+    const batchId = `playlist-${Date.now()}`
+    latestTaskRef.current = batchId
+    const isLatest = (): boolean => latestTaskRef.current === batchId
+    const total = entries.length
+    setBatch({ done: 0, total })
+    setProgress(0)
+    setDownloading(true)
+    ensureQueueWatcher()
+
+    let done = 0
+    const markDone = (): void => {
+      done += 1
+      if (!isLatest()) return
+      setBatch({ done, total })
+      setProgress(Math.round((done / total) * 100))
+      if (done === total) setDownloading(false)
+    }
+
+    for (const video of entries) {
+      const result = await window.api.download(video.url, format, resolvedQuality, video.title)
+      if ('error' in result || !result.success) {
+        setError(`${video.title}: ${'error' in result ? result.error : 'La descarga falló'}`)
+        markDone()
+        continue
+      }
+      const entry: HistoryEntry = {
+        title: video.title,
+        format: formatLabel,
+        path: downloadPath,
+        thumbnail: video.thumbnail ?? undefined
+      }
+      tracker.track(result.task_id, {
+        onProgress: () => {},
+        onCompleted: (update) => {
+          addToHistory(entry, update.path)
+          markDone()
+        },
+        onError: (message) => {
+          setError(`${video.title}: ${message}`)
+          markDone()
+        }
+      })
+    }
+  }
+
   const label = progressLabel({
     downloading,
     status: taskStatus,
     progress,
     retry: retry.count,
-    maxRetries: retry.max
+    maxRetries: retry.max,
+    batch
   })
 
   if (view === 'about') {
@@ -218,6 +284,15 @@ function App(): JSX.Element {
       <HistorySection items={history} onOpenFolder={handleOpenFolder} />
 
       <Footer onAboutClick={() => setView('about')} onHowToClick={() => setView('howto')} />
+
+      {playlist && (
+        <PlaylistModal
+          playlist={playlist}
+          formatLabel={formatLabel}
+          onCancel={() => setPlaylist(null)}
+          onConfirm={handleDownloadPlaylist}
+        />
+      )}
     </div>
   )
 }

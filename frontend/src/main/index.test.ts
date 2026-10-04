@@ -22,6 +22,7 @@ const BACKEND_CHANNELS: [string, unknown[]][] = [
   ['setConfig', [{ theme: 'dark' }]],
   ['download', [{ url: 'u', format: 'video', quality: '1080', title: 't' }]],
   ['getProgress', ['task-1']],
+  ['getProgressBatch', [['task-1', 'task-2']]],
   ['getQueue', []],
   ['pauseQueue', []],
   ['resumeQueue', []]

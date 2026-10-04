@@ -128,6 +128,19 @@ ipcMain.handle('getProgress', async (_event, taskId: string) => {
   }
 })
 
+ipcMain.handle('getProgressBatch', async (_event, taskIds: string[]) => {
+  try {
+    const res = await backendFetch('/progress/batch', 5_000, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task_ids: taskIds })
+    })
+    return await res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
+})
+
 ipcMain.handle('getQueue', async () => {
   try {
     const res = await backendFetch('/queue', 5_000)

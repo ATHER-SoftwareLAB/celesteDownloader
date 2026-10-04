@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Callable, Optional
 
 import yt_dlp
@@ -9,35 +10,111 @@ from yt_dlp.utils import sanitize_filename
 # just the requested video, which can mean dozens of videos and minutes.
 SINGLE_VIDEO_ARGS = {"noplaylist": True}
 
+# Channels can have thousands of uploads; only the most recent ones are listed.
+CHANNEL_MAX_VIDEOS = 50
+
+# A channel URL (@handle, /channel/, /c/, /user/), optionally with a tab.
+CHANNEL_URL_RE = re.compile(
+    r"^(?P<base>(?:https?://)?(?:www\.|m\.)?youtube\.com/"
+    r"(?:@[^/?#]+|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+))"
+    r"(?P<tab>/[^?#]*)?"
+)
+
+# Titles yt-dlp gives to playlist entries that can't be downloaded.
+UNAVAILABLE_ENTRY_TITLES = {"[Private video]", "[Deleted video]"}
+
+
+def channel_videos_url(url: str) -> Optional[str]:
+    """For a channel URL, the URL of its Videos tab; None for anything else.
+
+    A channel's root URL lists its tabs (Videos, Shorts, Live...) as entries
+    instead of videos, so it is pointed at the Videos tab. A URL that already
+    names a tab is kept as is.
+    """
+    match = CHANNEL_URL_RE.match(url)
+    if not match:
+        return None
+    tab = (match.group("tab") or "").strip("/")
+    return url if tab else f"{match.group('base')}/videos"
+
+
+def _entry_thumbnail(entry: dict) -> Optional[str]:
+    thumbnails = entry.get("thumbnails") or []
+    return thumbnails[-1].get("url") if thumbnails else None
+
+
+def _playlist_metadata(url: str, info: dict, is_channel: bool) -> dict:
+    entries = []
+    unavailable = 0
+    for entry in info.get("entries") or []:
+        # Skip nested lists (e.g. channel tabs) - only single videos are queued.
+        if not entry or entry.get("ie_key") != "Youtube" or not entry.get("url"):
+            continue
+        if entry.get("title") in UNAVAILABLE_ENTRY_TITLES:
+            unavailable += 1
+            continue
+        entries.append(
+            {
+                "url": entry["url"],
+                "title": entry.get("title") or "descarga",
+                "duration": entry.get("duration"),
+                "thumbnail": _entry_thumbnail(entry),
+            }
+        )
+    return {
+        "type": "playlist",
+        "url": url,
+        "title": info.get("title"),
+        "uploader": info.get("uploader") or info.get("channel"),
+        "is_channel": is_channel,
+        "unavailable_count": unavailable,
+        "entries": entries,
+    }
+
+
+def _video_metadata(url: str, info: dict) -> dict:
+    seen_heights = set()
+    formats = []
+    for f in info.get("formats", []):
+        height = f.get("height")
+        if height and height not in seen_heights:
+            seen_heights.add(height)
+            formats.append({"height": height, "fps": f.get("fps") or 0})
+    formats.sort(key=lambda f: f["height"], reverse=True)
+
+    return {
+        "type": "video",
+        "url": url,
+        "title": info.get("title"),
+        "duration": info.get("duration"),
+        "uploader": info.get("uploader"),
+        "upload_date": info.get("upload_date"),
+        "thumbnail": info.get("thumbnail"),
+        "formats": formats,
+    }
+
 
 def get_metadata(url: str) -> dict:
+    """Metadata for a video, or for a playlist/channel with its list of videos."""
+    channel_url = channel_videos_url(url)
     ydl_opts = {
         "quiet": True,
         "skip_download": True,
         "socket_timeout": 15,
+        # List playlist entries without extracting each video (seconds
+        # instead of minutes); a single video is still fully extracted.
+        "extract_flat": "in_playlist",
         **SINGLE_VIDEO_ARGS,
     }
+    if channel_url:
+        ydl_opts["playlistend"] = CHANNEL_MAX_VIDEOS
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+        info = ydl.extract_info(channel_url or url, download=False)
 
-        seen_heights = set()
-        formats = []
-        for f in info.get("formats", []):
-            height = f.get("height")
-            if height and height not in seen_heights:
-                seen_heights.add(height)
-                formats.append({"height": height, "fps": f.get("fps") or 0})
-        formats.sort(key=lambda f: f["height"], reverse=True)
-
-        return {
-            "url": url,
-            "title": info.get("title"),
-            "duration": info.get("duration"),
-            "uploader": info.get("uploader"),
-            "upload_date": info.get("upload_date"),
-            "thumbnail": info.get("thumbnail"),
-            "formats": formats,
-        }
+    if info.get("_type") == "playlist":
+        return _playlist_metadata(url, info, is_channel=channel_url is not None)
+    return _video_metadata(url, info)
 
 
 def _progress_hook(callback: Callable[[dict], None]):
