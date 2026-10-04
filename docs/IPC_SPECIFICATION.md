@@ -135,10 +135,11 @@ Pausar y reanudar procesamiento de cola.
 - VIDEO_PRIVATE
 - DISK_SPACE
 
-**Backoff Exponencial:**
-- Intento 1: error → esperar 3s
-- Intento 2: error → esperar 6s
-- Intento 3: error → fallar
+**Reintentos (hasta `max_retries`, por defecto 3):**
+- Intento inicial falla → esperar 3s → reintento 1
+- Reintento 1 falla → esperar 6s → reintento 2
+- Reintento 2 falla → esperar 10s → reintento 3
+- Reintento 3 falla → error final
 
 ---
 
