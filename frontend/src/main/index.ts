@@ -1,11 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { join } from 'path'
-
-const BACKEND_URL = 'http://127.0.0.1:5000'
+import { BACKEND_URL, startBackend, stopBackend } from './backend'
 
 let mainWindow: BrowserWindow | null = null
 
+// Resolves once the backend answers; every request waits for it, so the UI
+// can open while Python is still starting. Rejects if it can't start, which
+// the handlers report as "No se pudo conectar con el backend".
+let backendReady: Promise<void> = Promise.resolve()
+
 async function backendFetch(path: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
+  await backendReady
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -35,15 +40,23 @@ function createWindow(): void {
   }
 }
 
+// Handlers `return await res.json()` (not just `return res.json()`) so a
+// non-JSON body - e.g. a plain-text 500 from the backend - is caught by the
+// surrounding try instead of rejecting the renderer's invoke().
+
 ipcMain.handle('ping', async () => {
-  const res = await backendFetch('/ping', 5_000)
-  return res.json()
+  try {
+    const res = await backendFetch('/ping', 5_000)
+    return await res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
 })
 
 ipcMain.handle('getInfo', async (_event, url: string) => {
   try {
     const res = await backendFetch(`/info?url=${encodeURIComponent(url)}`, 20_000)
-    return res.json()
+    return await res.json()
   } catch (err) {
     const timedOut = err instanceof Error && err.name === 'AbortError'
     return {
@@ -57,7 +70,7 @@ ipcMain.handle('getInfo', async (_event, url: string) => {
 ipcMain.handle('getConfig', async () => {
   try {
     const res = await backendFetch('/config', 5_000)
-    return res.json()
+    return await res.json()
   } catch {
     return { error: 'No se pudo conectar con el backend' }
   }
@@ -70,7 +83,7 @@ ipcMain.handle('setConfig', async (_event, updates: Record<string, unknown>) => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
     })
-    return res.json()
+    return await res.json()
   } catch {
     return { error: 'No se pudo conectar con el backend' }
   }
@@ -96,7 +109,7 @@ ipcMain.handle(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(opts)
       })
-      return res.json()
+      return await res.json()
     } catch (err) {
       const timedOut = err instanceof Error && err.name === 'AbortError'
       return {
@@ -109,7 +122,7 @@ ipcMain.handle(
 ipcMain.handle('getProgress', async (_event, taskId: string) => {
   try {
     const res = await backendFetch(`/progress/${taskId}`, 5_000)
-    return res.json()
+    return await res.json()
   } catch {
     return { error: 'No se pudo conectar con el backend' }
   }
@@ -118,23 +131,35 @@ ipcMain.handle('getProgress', async (_event, taskId: string) => {
 ipcMain.handle('getQueue', async () => {
   try {
     const res = await backendFetch('/queue', 5_000)
-    return res.json()
+    return await res.json()
   } catch {
     return { error: 'No se pudo conectar con el backend' }
   }
 })
 
 ipcMain.handle('pauseQueue', async () => {
-  const res = await backendFetch('/queue/pause', 5_000, { method: 'POST' })
-  return res.json()
+  try {
+    const res = await backendFetch('/queue/pause', 5_000, { method: 'POST' })
+    return await res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
 })
 
 ipcMain.handle('resumeQueue', async () => {
-  const res = await backendFetch('/queue/resume', 5_000, { method: 'POST' })
-  return res.json()
+  try {
+    const res = await backendFetch('/queue/resume', 5_000, { method: 'POST' })
+    return await res.json()
+  } catch {
+    return { error: 'No se pudo conectar con el backend' }
+  }
 })
 
 app.whenReady().then(() => {
+  // In development the backend lives next to the frontend folder.
+  // TODO(packaging): resolve the bundled backend executable when app.isPackaged.
+  backendReady = startBackend(join(app.getAppPath(), '..', 'backend'))
+  backendReady.catch((err) => console.error('[backend]', err))
   createWindow()
 
   app.on('activate', () => {
@@ -144,4 +169,8 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('will-quit', () => {
+  stopBackend()
 })
