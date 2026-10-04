@@ -118,8 +118,8 @@ function App(): JSX.Element {
   }
 
   const handleTogglePause = async (): Promise<void> => {
-    if (queuePaused) await window.api.resumeQueue()
-    else await window.api.pauseQueue()
+    const result = queuePaused ? await window.api.resumeQueue() : await window.api.pauseQueue()
+    if ('error' in result) setError(result.error)
   }
 
   const handleOpenFolder = (path: string): void => {
