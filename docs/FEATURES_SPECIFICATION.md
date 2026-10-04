@@ -433,9 +433,11 @@ Pantalla de settings que guarda cambios en disco (archivo config JSON).
 | Tema | light/dark | dark | Sí |
 | Auto-reintentos | boolean | true | Sí |
 | Máximo reintentos | number | 3 | Sí |
-| Descargas paralelas | number | 1 | Sí |
-| Notificaciones | boolean | true | Sí |
 | Caché metadatos | number (min) | 30 | Sí |
+
+**Fuera del MVP (decisión 2026-10-03):**
+- *Descargas paralelas* — contradice la cola en serie definida en la arquitectura.
+- *Notificaciones* — se evaluará después del MVP.
 
 ### UI - Settings
 
@@ -656,9 +658,10 @@ Backend ejecuta: yt-dlp download [url]
 | Parámetro | MVP | Configurable |
 |-----------|-----|--------------|
 | Max reintentos | 3 | Sí (Settings) |
-| Delay inicial | 3s | No (MVP) |
-| Delay multiplicador | exponencial (3x) | No (MVP) |
+| Esperas antes de cada reintento | 3s → 6s → 10s | No (MVP) |
 | Tipos recuperables | conexión, timeout, rate-limit | Predefinido |
+
+`Max reintentos = 3` significa hasta 3 reintentos después del primer intento (4 intentos en total). Si se configuran más de 3, los reintentos extra esperan 10s.
 
 ### Errores No Recuperables
 - URL inválida o malformada
@@ -675,7 +678,7 @@ Backend ejecuta: yt-dlp download [url]
 - Rate limit de YouTube
 - Falla temporal de servidor
 
-**Comportamiento**: Reintentar automáticamente con backoff exponencial
+**Comportamiento**: Reintentar automáticamente con las esperas definidas arriba (3s → 6s → 10s)
 
 ### UI - Estado de Reintento
 
@@ -685,7 +688,7 @@ Backend ejecuta: yt-dlp download [url]
 ├──────────────────────────────────────┤
 │                                      │
 │ Descargando...                       │
-│ Intento 2 de 3                       │
+│ Reintento 1 de 3                     │
 │ ██████░░░░░░░░░░░░░░░░░░░░░░░░ 35% │
 │                                      │
 │              [Cancelar]              │
